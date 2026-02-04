@@ -2,133 +2,77 @@ import React, { useState, useEffect } from "react";
 import gsap from "gsap";
 
 const App = () => {
-  const [cards, setCards] = useState([]);
-  const [searchId, setSearchId] = useState("");
+  const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Mengambil API Key dari Environment Variable Vercel
   const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
+  const PALKIA_ID = "swsh12pt5gg-GG67";
 
-  const initialIds = [
-    "sv4pt5-232",
-    "sv4pt5-233",
-    "sv4pt5-234",
-    "swsh12pt5gg-GG67",
-  ];
-
-  const fetchCard = async (id) => {
-    const url = `https://api.pokemontcg.io/v2/cards/${id}`;
-
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-Api-Key": API_KEY,
-        Accept: "application/json",
-      },
-    });
-
-    if (!res.ok) throw new Error(`Gagal memuat ${id}`);
-    const result = await res.json();
-    return result.data;
-  };
-
-  useEffect(() => {
-    const loadInitial = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const loadedCards = [];
-        // Menggunakan for-of agar request dikirim satu per satu (mencegah error 504)
-        for (const id of initialIds) {
-          const data = await fetchCard(id);
-          loadedCards.push(data);
-          setCards([...loadedCards]); // Update UI setiap satu kartu selesai dimuat
-        }
-      } catch (err) {
-        console.error("Fetch Error:", err);
-        setError("Koneksi Timeout. Pastikan API Key di Vercel sudah benar.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitial();
-  }, []);
-
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchId) return;
+  const fetchSingleCard = async (id) => {
     setLoading(true);
+    setError(null);
     try {
-      const newCard = await fetchCard(searchId);
-      setCards((prev) => [newCard, ...prev]);
-      setSearchId("");
+      const url = `https://api.pokemontcg.io/v2/cards/${id}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Api-Key": API_KEY,
+          Accept: "application/json",
+        },
+      });
+
+      if (!res.ok)
+        throw new Error("Gagal memuat kartu. Cek API Key di Vercel.");
+      const result = await res.json();
+      setCard(result.data);
     } catch (err) {
-      alert("ID tidak ditemukan atau server sibuk.");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (cards.length > 0) {
+    fetchSingleCard(PALKIA_ID);
+  }, []);
+
+  useEffect(() => {
+    if (card) {
       gsap.fromTo(
-        ".pokemon-card",
-        { opacity: 0, scale: 0.9 },
-        {
-          opacity: 1,
-          scale: 1,
-          stagger: 0.1,
-          duration: 0.5,
-          ease: "power1.out",
-        },
+        ".palkia-box",
+        { opacity: 0, scale: 0.8 },
+        { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.7)" },
       );
     }
-  }, [cards]);
+  }, [card]);
 
   return (
     <div style={styles.container}>
-      <header style={{ textAlign: "center", marginBottom: "30px" }}>
-        <h1 style={{ color: "#fb7185" }}>Pokémon Tracker Pro</h1>
-        <p style={{ color: "#94a3b8" }}>Sequential Loading • Anti-Timeout</p>
-      </header>
+      <h1 style={styles.title}>Pokémon Single Tracker</h1>
 
-      <form onSubmit={handleSearch} style={styles.searchForm}>
-        <input
-          style={styles.input}
-          placeholder="Cari ID (e.g. swsh12pt5gg-GG67)"
-          value={searchId}
-          onChange={(e) => setSearchId(e.target.value)}
-        />
-        <button type="submit" style={styles.button}>
-          Cari
-        </button>
-      </form>
+      {loading && <p>Mencari Palkia VSTAR di server...</p>}
+      {error && <p style={{ color: "#ef4444" }}>{error}</p>}
 
-      {loading && (
-        <div style={{ textAlign: "center", color: "#fb7185" }}>
-          Memproses data kartu...
+      {card && (
+        <div className="palkia-box" style={styles.card}>
+          <img src={card.images.large} alt={card.name} style={styles.img} />
+          <h2 style={{ color: "#fb7185" }}>{card.name}</h2>
+          <div style={styles.priceTag}>
+            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
+          </div>
+          <p style={{ color: "#94a3b8" }}>
+            {card.set.name} • {card.rarity}
+          </p>
+          <button
+            onClick={() => fetchSingleCard(PALKIA_ID)}
+            style={styles.refreshBtn}
+          >
+            Update Harga
+          </button>
         </div>
       )}
-      {error && (
-        <div style={{ textAlign: "center", color: "#ef4444" }}>{error}</div>
-      )}
-
-      <div style={styles.grid}>
-        {cards.map((card, i) => (
-          <div key={card.id + i} className="pokemon-card" style={styles.card}>
-            <img
-              src={card.images.small}
-              alt={card.name}
-              style={{ width: "100%", borderRadius: "10px" }}
-            />
-            <h3>{card.name}</h3>
-            <div style={styles.priceTag}>
-              Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
@@ -137,53 +81,46 @@ const styles = {
   container: {
     backgroundColor: "#0f172a",
     minHeight: "100vh",
-    padding: "40px 20px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
     color: "white",
     fontFamily: "sans-serif",
+    padding: "20px",
   },
-  searchForm: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "10px",
-    marginBottom: "40px",
-  },
-  input: {
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid #334155",
+  title: { marginBottom: "30px", color: "#fb7185" },
+  card: {
     backgroundColor: "#1e293b",
-    color: "white",
-    width: "250px",
+    padding: "30px",
+    borderRadius: "20px",
+    textAlign: "center",
+    border: "1px solid #334155",
+    maxWidth: "400px",
   },
-  button: {
-    padding: "12px 24px",
+  img: {
+    width: "100%",
+    borderRadius: "15px",
+    marginBottom: "20px",
+    boxShadow: "0 10px 20px rgba(0,0,0,0.5)",
+  },
+  priceTag: {
+    backgroundColor: "#4f46e5",
+    padding: "15px",
+    borderRadius: "12px",
+    fontSize: "1.5rem",
+    fontWeight: "bold",
+    margin: "20px 0",
+  },
+  refreshBtn: {
+    marginTop: "15px",
+    padding: "10px 20px",
     borderRadius: "8px",
     border: "none",
     backgroundColor: "#10b981",
     color: "white",
-    fontWeight: "bold",
     cursor: "pointer",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "20px",
-    maxWidth: "1000px",
-    margin: "0 auto",
-  },
-  card: {
-    backgroundColor: "#1e293b",
-    padding: "15px",
-    borderRadius: "15px",
-    border: "1px solid #334155",
-    textAlign: "center",
-  },
-  priceTag: {
-    backgroundColor: "#4f46e5",
-    padding: "8px",
-    borderRadius: "8px",
     fontWeight: "bold",
-    margin: "10px 0",
   },
 };
 
