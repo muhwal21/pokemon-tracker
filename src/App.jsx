@@ -5,7 +5,7 @@ const App = () => {
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("Siap mencari...");
-  const [searchId, setSearchId] = useState("swsh12pt5gg-GG67");
+  const [searchId, setSearchId] = useState("ex3-14"); // ID Raichu Skyridge
 
   const fetchData = async (id) => {
     if (!id) return;
@@ -13,7 +13,7 @@ const App = () => {
 
     try {
       setLoading(true);
-      setStatus("Mengecek Database...");
+      setStatus("Mengecek Database Supabase...");
 
       // 1. Cek Supabase
       const { data: dbData } = await supabase
@@ -24,13 +24,13 @@ const App = () => {
 
       if (dbData) {
         setCard(dbData.full_json);
-        setStatus("Data dari Database!");
+        setStatus("Data diambil dari Database!");
         setLoading(false);
         return;
       }
 
-      // 2. Ambil dari API jika di DB kosong
-      setStatus("Mengambil dari Pokémon API...");
+      // 2. Jika tidak ada di DB, ambil dari Pokémon API
+      setStatus("Mengambil dari API Pokémon...");
       const res = await fetch(`https://api.pokemontcg.io/v2/cards/${cleanId}`, {
         headers: {
           "X-Api-Key": import.meta.env.VITE_POKEMON_API_KEY,
@@ -43,8 +43,8 @@ const App = () => {
       const result = await res.json();
       const cardData = result.data;
 
-      // 3. Simpan ke Supabase dengan Data Lengkap (Agar Kolom Tidak Kosong)
-      setStatus("Menyimpan ke Database...");
+      // 3. Simpan ke Supabase (Mengisi semua kolom agar tidak NULL)
+      setStatus("Sinkronisasi ke Database...");
       await supabase.from("cards").upsert([
         {
           id: cardData.id,
@@ -54,7 +54,7 @@ const App = () => {
           rarity: cardData.rarity,
           market_price:
             cardData.tcgplayer?.prices?.holofoil?.market ||
-            cardData.tcgplayer?.prices?.unlimitedHolofoil?.market ||
+            cardData.tcgplayer?.prices?.reverseHolofoil?.market ||
             cardData.tcgplayer?.prices?.normal?.market ||
             null,
           full_json: cardData,
@@ -62,17 +62,17 @@ const App = () => {
       ]);
 
       setCard(cardData);
-      setStatus("Selesai!");
+      setStatus("Berhasil dimuat!");
     } catch (err) {
       console.error(err);
-      setStatus(`Error: ${err.message}`);
+      setStatus(`Masalah: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData("swsh12pt5gg-GG67");
+    fetchData("ex3-14");
   }, []);
 
   const handleSearch = (e) => {
@@ -88,17 +88,17 @@ const App = () => {
             style={styles.input}
             value={searchId}
             onChange={(e) => setSearchId(e.target.value)}
-            placeholder="ID Kartu (e.g. e1-7)"
+            placeholder="Ketik ID (contoh: ex3-14)"
           />
           <button style={styles.button} type="submit">
-            Cari
+            Cari Kartu
           </button>
         </form>
         <p style={styles.status}>{status}</p>
       </div>
 
       {loading ? (
-        <div style={styles.center}>🔄 Memproses...</div>
+        <div style={styles.center}>🔄 Memproses Data...</div>
       ) : (
         card && (
           <div style={styles.cardBox}>
@@ -107,17 +107,18 @@ const App = () => {
               <span style={styles.hp}>HP {card.hp}</span>
             </div>
             <img src={card.images.large} alt={card.name} style={styles.img} />
-            <p style={styles.flavor}>
-              "{card.flavorText || "No flavor text available."}"
+            <p style={styles.subText}>
+              {card.rarity} - {card.set.name}
             </p>
 
             <div style={styles.priceSection}>
-              <p style={{ margin: 0, fontSize: "0.8rem" }}>Market Price</p>
+              <p style={{ margin: 0, fontSize: "0.8rem" }}>
+                Harga Pasar (Market Price)
+              </p>
               <h2 style={{ margin: "5px 0" }}>
                 $
                 {card.tcgplayer?.prices?.holofoil?.market ||
-                  card.tcgplayer?.prices?.unlimitedHolofoil?.market ||
-                  card.tcgplayer?.prices?.normal?.market ||
+                  card.tcgplayer?.prices?.reverseHolofoil?.market ||
                   "N/A"}
               </h2>
             </div>
@@ -175,15 +176,14 @@ const styles = {
     alignItems: "center",
     marginBottom: "15px",
   },
-  title: { fontSize: "1.5rem", margin: 0, color: "#fb7185" },
+  title: { fontSize: "1.5rem", color: "#fb7185", margin: 0 },
   hp: { color: "#f43f5e", fontWeight: "bold" },
-  img: { width: "100%", borderRadius: "10px" },
-  flavor: {
-    fontStyle: "italic",
-    color: "#94a3b8",
-    fontSize: "0.85rem",
-    margin: "20px 0",
+  img: {
+    width: "100%",
+    borderRadius: "10px",
+    boxShadow: "0 10px 20px rgba(0,0,0,0.5)",
   },
+  subText: { color: "#94a3b8", fontSize: "0.8rem", margin: "15px 0" },
   priceSection: {
     backgroundColor: "#4f46e5",
     padding: "15px",
