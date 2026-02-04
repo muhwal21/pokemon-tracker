@@ -1,127 +1,87 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
-import gsap from "gsap";
 
 const App = () => {
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("Inisialisasi...");
+  const [status, setStatus] = useState("Memulai...");
 
-  const TARGET_ID = "neo2-1"; // Espeon Neo Discovery
-
-  const fetchData = async (id) => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      setStatus("Mengecek Database Supabase...");
+      setStatus("Menghubungkan ke Supabase...");
 
-      // 1. Ambil dari Supabase
+      // 1. Cek Supabase
       const { data: localData, error: dbError } = await supabase
         .from("cards")
         .select("*")
-        .eq("id", id)
+        .eq("id", "neo2-1")
         .single();
 
       if (localData) {
-        setStatus("Data ditemukan di Supabase (Instan!)");
         setCard(localData.full_json);
+        setStatus("Data diambil dari Database!");
         setLoading(false);
         return;
       }
 
-      // 2. Jika tidak ada, ambil dari API Pokémon
-      setStatus("Database kosong, mengambil dari Pokémon API...");
-      const response = await fetch(`https://api.pokemontcg.io/v2/cards/${id}`, {
-        headers: { "X-Api-Key": import.meta.env.VITE_POKEMON_API_KEY },
+      // 2. Ambil dari API (Gunakan header Accept untuk hindari error 406)
+      setStatus("Mengambil data dari Pokémon API...");
+      const res = await fetch("https://api.pokemontcg.io/v2/cards/neo2-1", {
+        headers: {
+          "X-Api-Key": import.meta.env.VITE_POKEMON_API_KEY,
+          Accept: "application/json",
+        },
       });
-      const result = await response.json();
+
+      if (!res.ok) throw new Error(`Server API Error: ${res.status}`);
+
+      const result = await res.json();
       const cardData = result.data;
 
-      // 3. Simpan otomatis ke Supabase agar fetch berikutnya cepat
-      setStatus("Menyimpan ke Database...");
-      await supabase.from("cards").insert([
+      // 3. Simpan ke Supabase (Upsert agar tidak double)
+      await supabase.from("cards").upsert([
         {
           id: cardData.id,
           name: cardData.name,
           image_url: cardData.images.large,
-          market_price: cardData.tcgplayer?.prices?.holofoil?.market || null,
-          full_json: cardData, // Simpan semua data tanpa tersisa
+          full_json: cardData,
         },
       ]);
 
       setCard(cardData);
-      setStatus("Data berhasil disinkronkan!");
+      setStatus("Data berhasil dimuat dan disimpan!");
     } catch (err) {
       console.error(err);
-      setStatus("Terjadi kesalahan koneksi.");
+      setStatus(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData(TARGET_ID);
+    fetchData();
   }, []);
 
-  // Animasi GSAP saat kartu muncul
-  useEffect(() => {
-    if (card) {
-      gsap.fromTo(
-        ".card-box",
-        { opacity: 0, y: 30 },
-        { opacity: 1, y: 0, duration: 1 },
-      );
-    }
-  }, [card]);
+  if (loading) return <div style={styles.info}>🔄 {status}</div>;
 
   return (
     <div style={styles.container}>
-      <div style={styles.statusBar}>Status: {status}</div>
-
-      {loading ? (
-        <div style={styles.loader}>Memproses Data...</div>
-      ) : (
-        card && (
-          <div className="card-box" style={styles.cardWrapper}>
-            <div style={styles.layout}>
-              {/* Sisi Kiri: Gambar */}
-              <div style={styles.left}>
-                <img
-                  src={card.images.large}
-                  alt={card.name}
-                  style={styles.img}
-                />
-              </div>
-
-              {/* Sisi Kanan: Semua Data Tanpa Sisa */}
-              <div style={styles.right}>
-                <h1 style={styles.name}>
-                  {card.name} <span style={styles.hp}>HP {card.hp}</span>
-                </h1>
-                <p style={styles.subTitle}>
-                  {card.rarity} • {card.artist}
-                </p>
-                <p style={styles.flavor}>
-                  {card.flavorText || "Cerita kartu tidak tersedia."}
-                </p>
-
-                <div style={styles.section}>
-                  <h3 style={styles.sectionTitle}>Serangan (Attacks)</h3>
-                  {card.attacks?.map((atk, i) => (
-                    <div key={i} style={styles.attackItem}>
-                      <strong>{atk.name}</strong> - {atk.damage || "0"} DMG
-                      <p style={styles.desc}>{atk.text}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={styles.priceTag}>
-                  Harga Pasar: $
-                  {card.tcgplayer?.prices?.holofoil?.market || "N/A"}
-                </div>
-              </div>
-            </div>
+      <p style={styles.statusText}>{status}</p>
+      {card && (
+        <div className="card-box" style={styles.cardBox}>
+          <img src={card.images.large} alt={card.name} style={styles.img} />
+          <h1 style={styles.title}>{card.name}</h1>
+          <div style={styles.detail}>
+            <p>
+              <strong>Set:</strong> {card.set.name}
+            </p>
+            <p>
+              <strong>Artist:</strong> {card.artist}
+            </p>
+            <p style={styles.flavor}>{card.flavorText}</p>
           </div>
-        )
+        </div>
       )}
     </div>
   );
@@ -135,62 +95,25 @@ const styles = {
     padding: "40px",
     fontFamily: "sans-serif",
   },
-  statusBar: {
-    position: "fixed",
-    top: 10,
-    left: 10,
-    fontSize: "0.8rem",
-    color: "#10b981",
-  },
-  loader: { textAlign: "center", marginTop: "100px", fontSize: "1.5rem" },
-  cardWrapper: {
-    backgroundColor: "#0f172a",
-    padding: "30px",
-    borderRadius: "24px",
-    border: "1px solid #1e293b",
-    maxWidth: "1000px",
+  info: { color: "white", textAlign: "center", marginTop: "50px" },
+  statusText: { fontSize: "0.8rem", color: "#10b981", marginBottom: "20px" },
+  cardBox: {
+    maxWidth: "400px",
     margin: "0 auto",
+    backgroundColor: "#0f172a",
+    padding: "20px",
+    borderRadius: "20px",
+    border: "1px solid #1e293b",
+    textAlign: "center",
   },
-  layout: { display: "flex", gap: "40px", flexWrap: "wrap" },
-  left: { flex: 1, minWidth: "300px" },
-  right: { flex: 1.5, minWidth: "300px" },
   img: {
     width: "100%",
-    borderRadius: "15px",
-    boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-  },
-  name: { fontSize: "2.5rem", margin: "0" },
-  hp: { color: "#f43f5e", fontSize: "1.2rem" },
-  subTitle: { color: "#94a3b8", margin: "10px 0" },
-  flavor: {
-    fontStyle: "italic",
-    color: "#64748b",
-    margin: "20px 0",
-    borderLeft: "3px solid #334155",
-    paddingLeft: "15px",
-  },
-  section: { marginTop: "30px" },
-  sectionTitle: {
-    color: "#10b981",
-    borderBottom: "1px solid #334155",
-    paddingBottom: "5px",
-  },
-  attackItem: {
-    backgroundColor: "#1e293b",
-    padding: "15px",
     borderRadius: "10px",
-    marginTop: "10px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
   },
-  desc: { fontSize: "0.9rem", color: "#94a3b8", marginTop: "5px" },
-  priceTag: {
-    backgroundColor: "#4f46e5",
-    padding: "20px",
-    borderRadius: "12px",
-    fontWeight: "bold",
-    marginTop: "30px",
-    textAlign: "center",
-    fontSize: "1.5rem",
-  },
+  title: { color: "#fb7185", marginTop: "20px" },
+  detail: { textAlign: "left", marginTop: "20px", fontSize: "0.9rem" },
+  flavor: { fontStyle: "italic", color: "#64748b", marginTop: "10px" },
 };
 
 export default App;
