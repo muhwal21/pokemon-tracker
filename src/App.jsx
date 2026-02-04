@@ -7,12 +7,10 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Mengambil API Key dari Environment Variable Vercel
-  const API_KEY =
-    import.meta.env.VITE_POKEMON_API_KEY ||
-    "3c8fed90-404a-4db8-8fe0-e99ad48c82d7";
+  // Mengambil API Key dari "Settings" Vercel secara otomatis
+  const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
 
-  // Daftar kartu favoritmu untuk load awal
+  // Daftar kartu awal (Mew, Gardevoir, Charizard, & Palkia)
   const initialIds = [
     "sv4pt5-232",
     "sv4pt5-233",
@@ -21,15 +19,14 @@ const App = () => {
   ];
 
   const fetchCard = async (id) => {
-    // LANGSUNG ke API resmi tanpa proxy AllOrigins agar tidak kena blokir CORS header
+    // Langsung menembak ke API Pokémon tanpa proxy agar tidak kena CORS error di Vercel
     const url = `https://api.pokemontcg.io/v2/cards/${id}`;
 
     const res = await fetch(url, {
       method: "GET",
       headers: {
-        "X-Api-Key": API_KEY,
+        "X-Api-Key": API_KEY, // Menggunakan key rahasia dari Vercel
         Accept: "application/json",
-        "Content-Type": "application/json",
       },
     });
 
@@ -50,7 +47,7 @@ const App = () => {
       } catch (err) {
         console.error(err);
         setError(
-          "Koneksi API bermasalah. Pastikan Redeploy di Vercel sudah selesai.",
+          "Gagal memuat data. Pastikan API Key di Vercel sudah benar dan lakukan Redeploy.",
         );
       } finally {
         setLoading(false);
@@ -74,6 +71,7 @@ const App = () => {
     }
   };
 
+  // Animasi GSAP agar kartu muncul dengan halus
   useEffect(() => {
     if (cards.length > 0) {
       gsap.fromTo(
@@ -83,7 +81,7 @@ const App = () => {
           opacity: 1,
           y: 0,
           scale: 1,
-          stagger: 0.2,
+          stagger: 0.15,
           duration: 0.6,
           ease: "back.out(1.7)",
         },
@@ -95,9 +93,7 @@ const App = () => {
     <div style={styles.container}>
       <header style={{ textAlign: "center", marginBottom: "40px" }}>
         <h1 style={styles.title}>Pokémon Tracker Pro</h1>
-        <p style={{ color: "#94a3b8" }}>
-          Murni API • Deployment Vercel Berhasil
-        </p>
+        <p style={{ color: "#94a3b8" }}>Data Real-time • Murni API TCG</p>
       </header>
 
       <form onSubmit={handleSearch} style={styles.searchForm}>
@@ -114,7 +110,7 @@ const App = () => {
 
       {loading && (
         <div style={{ textAlign: "center", color: "#fb7185" }}>
-          Mengambil data dari server Pokémon...
+          Menghubungkan ke server...
         </div>
       )}
       {error && (
@@ -202,7 +198,6 @@ const styles = {
     borderRadius: "20px",
     border: "1px solid #334155",
     textAlign: "center",
-    transition: "0.3s",
   },
   priceTag: {
     backgroundColor: "#4f46e5",
