@@ -7,7 +7,7 @@ const App = () => {
   const [error, setError] = useState(null);
 
   const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
-  const PALKIA_ID = "swsh12pt5gg-GG67";
+  const PALKIA_ID = "neo2-1";
 
   // Pastikan nama fungsi ini konsisten
   const fetchCardData = async (id) => {
