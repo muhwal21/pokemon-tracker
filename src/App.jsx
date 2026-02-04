@@ -7,71 +7,96 @@ const App = () => {
   const [error, setError] = useState(null);
 
   const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
-  const PALKIA_ID = "neo2-1";
+  const TARGET_ID = "neo2-1"; // Espeon dari Neo Discovery sesuai keinginanmu
 
-  // Pastikan nama fungsi ini konsisten
   const fetchCardData = async (id) => {
+    // 1. Cek Cache di LocalStorage agar loading instan (CS Best Practice)
+    const cached = localStorage.getItem(`card-${id}`);
+    if (cached) {
+      setCard(JSON.parse(cached));
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const cleanId = id.trim();
-      const url = `https://api.pokemontcg.io/v2/cards/${cleanId}`;
+      const url = `https://api.pokemontcg.io/v2/cards/${id}`;
 
       const res = await fetch(url, {
         method: "GET",
+        // Menambahkan header lengkap untuk menghindari blokir CORS
         headers: {
           "X-Api-Key": API_KEY,
           Accept: "application/json",
+          "Content-Type": "application/json",
         },
       });
 
-      if (res.status === 404)
-        throw new Error("ID Kartu tidak terdaftar di database.");
-      if (!res.ok) throw new Error(`Error: ${res.status}`);
+      if (!res.ok) {
+        throw new Error(
+          `Gagal (Status: ${res.status}). Cek API Key di Vercel.`,
+        );
+      }
 
       const result = await res.json();
+
+      // 2. Simpan ke database lokal browser agar tidak perlu fetch ulang
+      localStorage.setItem(`card-${id}`, JSON.stringify(result.data));
       setCard(result.data);
     } catch (err) {
-      setError(err.message);
+      console.error("Fetch Error:", err);
+      setError("Server sedang sibuk (CORS/504). Silakan coba lagi nanti.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCardData(PALKIA_ID); // Sudah diperbaiki panggilannya
+    fetchCardData(TARGET_ID);
   }, []);
 
   useEffect(() => {
     if (card) {
       gsap.fromTo(
-        ".palkia-box",
-        { opacity: 0, scale: 0.9 },
-        { opacity: 1, scale: 1, duration: 0.8 },
+        ".card-box",
+        { opacity: 0, scale: 0.9, y: 30 },
+        { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "back.out" },
       );
     }
   }, [card]);
 
   return (
     <div style={styles.container}>
-      <h1 style={{ color: "#fb7185", textAlign: "center" }}>
-        Origin Forme Palkia Tracker
-      </h1>
+      <header style={{ textAlign: "center", marginBottom: "30px" }}>
+        <h1 style={styles.title}>Pokémon Database Tracker</h1>
+        <p style={{ color: "#94a3b8" }}>Belajar API & Data Structure</p>
+      </header>
 
-      {loading && <p>Menghubungi Server...</p>}
-      {error && (
-        <p style={{ color: "#ef4444", textAlign: "center" }}>{error}</p>
-      )}
+      {loading && <p style={{ color: "#fb7185" }}>Menghubungi Server...</p>}
+
+      {error && <div style={styles.errorBox}>{error}</div>}
 
       {card && (
-        <div className="palkia-box" style={styles.card}>
+        <div className="card-box" style={styles.card}>
+          {/* Format gambar kualitas tinggi sesuai dokumentasi API */}
           <img src={card.images.large} alt={card.name} style={styles.img} />
-          <h2>{card.name}</h2>
+          <h2 style={{ margin: "15px 0" }}>{card.name}</h2>
+          <p style={{ color: "#94a3b8" }}>
+            {card.set.name} • #{card.number}
+          </p>
+
           <div style={styles.priceTag}>
-            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "69.54"}
+            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
           </div>
-          <button onClick={() => fetchCardData(PALKIA_ID)} style={styles.btn}>
-            Refresh Harga
+
+          <button
+            onClick={() => {
+              localStorage.removeItem(`card-${TARGET_ID}`); // Bersihkan cache untuk fetch ulang
+              fetchCardData(TARGET_ID);
+            }}
+            style={styles.btn}
+          >
+            Update Harga Real-time
           </button>
         </div>
       )}
@@ -91,6 +116,14 @@ const styles = {
     fontFamily: "sans-serif",
     padding: "20px",
   },
+  title: { color: "#fb7185", fontSize: "2rem", margin: "0" },
+  errorBox: {
+    border: "1px solid #ef4444",
+    padding: "15px",
+    borderRadius: "10px",
+    color: "#ef4444",
+    marginBottom: "20px",
+  },
   card: {
     backgroundColor: "#1e293b",
     padding: "30px",
@@ -99,20 +132,24 @@ const styles = {
     border: "1px solid #334155",
     maxWidth: "350px",
   },
-  img: { width: "100%", borderRadius: "15px" },
+  img: {
+    width: "100%",
+    borderRadius: "15px",
+    boxShadow: "0 10px 20px rgba(0,0,0,0.5)",
+  },
   priceTag: {
     backgroundColor: "#4f46e5",
     padding: "15px",
     borderRadius: "12px",
     fontWeight: "bold",
     margin: "20px 0",
-    fontSize: "1.3rem",
+    fontSize: "1.2rem",
   },
   btn: {
     backgroundColor: "#10b981",
     color: "white",
     border: "none",
-    padding: "12px 24px",
+    padding: "12px",
     borderRadius: "8px",
     cursor: "pointer",
     fontWeight: "bold",
