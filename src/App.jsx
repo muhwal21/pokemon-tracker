@@ -1,96 +1,119 @@
 import React, { useState, useEffect } from "react";
+import { supabase } from "./supabaseClient";
 import gsap from "gsap";
 
 const App = () => {
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [status, setStatus] = useState("");
+  const TARGET_ID = "neo2-1";
 
-  const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
-  const TARGET_ID = "neo2-1"; // ID Kartu Espeon Neo Discovery
+  const getCardData = async (id) => {
+    setLoading(true);
+    setStatus("Mencari di Database Supabase...");
 
-  const fetchCardData = async (id) => {
-    // 1. Cek Memori Lokal (LocalStorage) agar tidak terkena limit API/CORS berulang kali
-    const cachedData = localStorage.getItem(`pokemon-card-${id}`);
-    if (cachedData) {
-      setCard(JSON.parse(cachedData));
+    // 1. CEK SUPABASE DULU (CS Strategy: Caching)
+    const { data: existingCard, error: supabaseError } = await supabase
+      .from("cards")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (existingCard) {
+      console.log("Data ditemukan di Supabase!");
+      setStatus("Data ditemukan di Supabase (Instan!)");
+      setCard(existingCard.full_json);
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    // 2. JIKA TIDAK ADA, AMBIL DARI POKEMON API
+    setStatus("Database kosong, mengambil dari Pokémon API...");
     try {
-      const url = `https://api.pokemontcg.io/v2/cards/${id}`;
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "X-Api-Key": API_KEY, // Mengirim API Key di Header
-          Accept: "application/json",
-        },
+      const res = await fetch(`https://api.pokemontcg.io/v2/cards/${id}`, {
+        headers: { "X-Api-Key": import.meta.env.VITE_POKEMON_API_KEY },
       });
-
-      if (!res.ok) {
-        throw new Error(`HTTP Error! Status: ${res.status}`);
-      }
-
       const result = await res.json();
+      const cardData = result.data;
 
-      // 2. Simpan ke Memori Lokal agar loading berikutnya instan
-      localStorage.setItem(`pokemon-card-${id}`, JSON.stringify(result.data));
-      setCard(result.data);
+      // 3. SIMPAN OTOMATIS KE SUPABASE (Data Mirroring)
+      const { error: insertError } = await supabase.from("cards").insert([
+        {
+          id: cardData.id,
+          name: cardData.name,
+          image_url: cardData.images.large,
+          set_name: cardData.set.name,
+          market_price:
+            cardData.tcgplayer?.prices?.holofoil?.market ||
+            cardData.tcgplayer?.prices?.normal?.market ||
+            null,
+          full_json: cardData, // Simpan JSON lengkap tanpa sisa
+        },
+      ]);
+
+      if (insertError) console.error("Gagal simpan ke Supabase:", insertError);
+
+      setCard(cardData);
+      setStatus("Data baru berhasil disimpan ke Database!");
     } catch (err) {
-      console.error("Fetch Error:", err);
-      setError("CORS atau Koneksi Timeout. Silakan Redeploy Vercel.");
+      console.error("Error Fetching:", err);
+      setStatus("Terjadi kesalahan koneksi.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCardData(TARGET_ID);
+    getCardData(TARGET_ID);
   }, []);
 
   useEffect(() => {
     if (card) {
       gsap.fromTo(
         ".card-box",
-        { opacity: 0, scale: 0.9, y: 20 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "power2.out" },
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 1 },
       );
     }
   }, [card]);
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Neo Discovery Tracker</h1>
+      <p style={{ color: "#10b981", fontSize: "0.8rem" }}>Status: {status}</p>
 
-      {loading && <p style={{ color: "#fb7185" }}>Menghubungi Server...</p>}
+      {loading ? (
+        <p>Tunggu sebentar...</p>
+      ) : (
+        card && (
+          <div className="card-box" style={styles.cardWrapper}>
+            <div style={styles.header}>
+              <img src={card.images.large} alt={card.name} style={styles.img} />
+              <div style={styles.mainInfo}>
+                <h1>
+                  {card.name} <span style={styles.hp}>HP {card.hp}</span>
+                </h1>
+                <p style={styles.flavor}>{card.flavorText}</p>
 
-      {error && <div style={styles.errorBox}>{error}</div>}
+                <div style={styles.section}>
+                  <h3>Attacks</h3>
+                  {card.attacks?.map((atk, i) => (
+                    <div key={i} style={styles.atkItem}>
+                      <strong>{atk.name}</strong> - {atk.damage || "0"} DMG
+                      <p style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                        {atk.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
 
-      {card && (
-        <div className="card-box" style={styles.card}>
-          <img src={card.images.large} alt={card.name} style={styles.img} />
-          <h2 style={{ margin: "15px 0" }}>{card.name}</h2>
-          <p style={{ color: "#94a3b8" }}>
-            {card.set.name} • #{card.number}
-          </p>
-
-          <div style={styles.priceTag}>
-            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
+                <div style={styles.priceTag}>
+                  Market Price: $
+                  {card.tcgplayer?.prices?.holofoil?.market || "N/A"}
+                </div>
+              </div>
+            </div>
           </div>
-
-          <button
-            onClick={() => {
-              localStorage.removeItem(`pokemon-card-${TARGET_ID}`); // Paksa hapus cache
-              fetchCardData(TARGET_ID);
-            }}
-            style={styles.btn}
-          >
-            Refresh & Update Harga
-          </button>
-        </div>
+        )
       )}
     </div>
   );
@@ -98,55 +121,44 @@ const App = () => {
 
 const styles = {
   container: {
-    backgroundColor: "#0f172a",
+    backgroundColor: "#020617",
     minHeight: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
     color: "white",
+    padding: "40px",
     fontFamily: "sans-serif",
-    padding: "20px",
   },
-  title: { color: "#fb7185", fontSize: "2rem", marginBottom: "30px" },
-  errorBox: {
-    border: "1px solid #ef4444",
-    padding: "15px",
-    borderRadius: "10px",
-    color: "#ef4444",
-    marginBottom: "20px",
-    textAlign: "center",
-  },
-  card: {
-    backgroundColor: "#1e293b",
+  cardWrapper: {
+    backgroundColor: "#0f172a",
     padding: "30px",
-    borderRadius: "25px",
-    textAlign: "center",
-    border: "1px solid #334155",
-    maxWidth: "350px",
+    borderRadius: "20px",
+    border: "1px solid #1e293b",
+    maxWidth: "900px",
+    margin: "0 auto",
   },
+  header: { display: "flex", gap: "30px", flexWrap: "wrap" },
   img: {
-    width: "100%",
+    width: "300px",
     borderRadius: "15px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+  },
+  mainInfo: { flex: 1 },
+  hp: { color: "#f43f5e", fontSize: "1.2rem" },
+  flavor: { fontStyle: "italic", color: "#64748b", margin: "15px 0" },
+  section: { marginTop: "20px" },
+  atkItem: {
+    backgroundColor: "#1e293b",
+    padding: "10px",
+    borderRadius: "8px",
+    marginTop: "10px",
   },
   priceTag: {
     backgroundColor: "#4f46e5",
     padding: "15px",
     borderRadius: "12px",
     fontWeight: "bold",
-    margin: "20px 0",
+    marginTop: "20px",
+    textAlign: "center",
     fontSize: "1.2rem",
-  },
-  btn: {
-    backgroundColor: "#10b981",
-    color: "white",
-    border: "none",
-    padding: "12px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
-    width: "100%",
   },
 };
 
