@@ -15,11 +15,12 @@ const App = () => {
     setError(null);
     try {
       const url = `https://api.pokemontcg.io/v2/cards/${id}`;
+
+      // Menghapus header kustom yang sering memicu kegagalan Preflight CORS
       const res = await fetch(url, {
         method: "GET",
         headers: {
           "X-Api-Key": API_KEY,
-          Accept: "application/json",
         },
       });
 
@@ -28,7 +29,10 @@ const App = () => {
       const result = await res.json();
       setCard(result.data);
     } catch (err) {
-      setError(err.message);
+      console.error("Fetch error:", err);
+      setError(
+        "CORS atau Koneksi diblokir browser. Coba buka di HP dengan Paket Data.",
+      );
     } finally {
       setLoading(false);
     }
@@ -42,35 +46,31 @@ const App = () => {
     if (card) {
       gsap.fromTo(
         ".palkia-box",
-        { opacity: 0, scale: 0.8 },
-        { opacity: 1, scale: 1, duration: 0.8, ease: "back.out(1.7)" },
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.8 },
       );
     }
   }, [card]);
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Pokémon Single Tracker</h1>
+      <h1 style={{ color: "#fb7185" }}>Palkia VSTAR Tracker</h1>
 
-      {loading && <p>Mencari Palkia VSTAR di server...</p>}
-      {error && <p style={{ color: "#ef4444" }}>{error}</p>}
+      {loading && <p>Menghubungi Server...</p>}
+      {error && <p style={{ color: "#ef4444", fontWeight: "bold" }}>{error}</p>}
 
       {card && (
         <div className="palkia-box" style={styles.card}>
-          <img src={card.images.large} alt={card.name} style={styles.img} />
-          <h2 style={{ color: "#fb7185" }}>{card.name}</h2>
+          <img
+            src={card.images.small}
+            alt={card.name}
+            style={{ width: "100%", borderRadius: "10px" }}
+          />
+          <h2>{card.name}</h2>
           <div style={styles.priceTag}>
-            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
+            Market: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
           </div>
-          <p style={{ color: "#94a3b8" }}>
-            {card.set.name} • {card.rarity}
-          </p>
-          <button
-            onClick={() => fetchSingleCard(PALKIA_ID)}
-            style={styles.refreshBtn}
-          >
-            Update Harga
-          </button>
+          <p>{card.set.name}</p>
         </div>
       )}
     </div>
@@ -87,40 +87,21 @@ const styles = {
     justifyContent: "center",
     color: "white",
     fontFamily: "sans-serif",
-    padding: "20px",
   },
-  title: { marginBottom: "30px", color: "#fb7185" },
   card: {
     backgroundColor: "#1e293b",
-    padding: "30px",
+    padding: "20px",
     borderRadius: "20px",
     textAlign: "center",
     border: "1px solid #334155",
-    maxWidth: "400px",
-  },
-  img: {
-    width: "100%",
-    borderRadius: "15px",
-    marginBottom: "20px",
-    boxShadow: "0 10px 20px rgba(0,0,0,0.5)",
+    width: "300px",
   },
   priceTag: {
     backgroundColor: "#4f46e5",
-    padding: "15px",
-    borderRadius: "12px",
-    fontSize: "1.5rem",
+    padding: "10px",
+    borderRadius: "10px",
     fontWeight: "bold",
-    margin: "20px 0",
-  },
-  refreshBtn: {
-    marginTop: "15px",
-    padding: "10px 20px",
-    borderRadius: "8px",
-    border: "none",
-    backgroundColor: "#10b981",
-    color: "white",
-    cursor: "pointer",
-    fontWeight: "bold",
+    margin: "15px 0",
   },
 };
 
