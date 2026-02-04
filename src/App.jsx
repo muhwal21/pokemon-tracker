@@ -7,10 +7,7 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Mengambil API Key dari "Settings" Vercel secara otomatis
-  const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
-
-  // Daftar kartu awal (Mew, Gardevoir, Charizard, & Palkia)
+  // Daftar ID kartu awal (termasuk Palkia favoritmu)
   const initialIds = [
     "sv4pt5-232",
     "sv4pt5-233",
@@ -19,23 +16,24 @@ const App = () => {
   ];
 
   const fetchCard = async (id) => {
-    // Langsung menembak ke API Pokémon tanpa proxy agar tidak kena CORS error di Vercel
+    // Menembak langsung ke API resmi
     const url = `https://api.pokemontcg.io/v2/cards/${id}`;
 
     const res = await fetch(url, {
       method: "GET",
+      // Kita coba tanpa API Key dulu untuk mengetes apakah koneksi dasar diizinkan
       headers: {
-        "X-Api-Key": API_KEY, // Menggunakan key rahasia dari Vercel
         Accept: "application/json",
       },
     });
 
-    if (!res.ok) throw new Error(`Kartu ${id} tidak ditemukan`);
+    if (!res.ok) throw new Error("Gagal mengambil data dari server");
 
     const result = await res.json();
     return result.data;
   };
 
+  // Mengambil data kartu saat pertama kali dibuka
   useEffect(() => {
     const loadInitial = async () => {
       setLoading(true);
@@ -45,10 +43,8 @@ const App = () => {
         const results = await Promise.all(promises);
         setCards(results);
       } catch (err) {
-        console.error(err);
-        setError(
-          "Gagal memuat data. Pastikan API Key di Vercel sudah benar dan lakukan Redeploy.",
-        );
+        console.error("Fetch Error:", err);
+        setError("Gagal memuat koleksi. Coba gunakan VPN atau Paket Data HP.");
       } finally {
         setLoading(false);
       }
@@ -56,6 +52,7 @@ const App = () => {
     loadInitial();
   }, []);
 
+  // Fungsi untuk mencari kartu berdasarkan ID manual
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!searchId) return;
@@ -65,25 +62,25 @@ const App = () => {
       setCards((prev) => [newCard, ...prev]);
       setSearchId("");
     } catch (err) {
-      alert("ID tidak ditemukan! Gunakan format: sv4pt5-234");
+      alert("ID tidak ditemukan! Contoh format: sv4pt5-234");
     } finally {
       setLoading(false);
     }
   };
 
-  // Animasi GSAP agar kartu muncul dengan halus
+  // Animasi GSAP agar kartu muncul dengan efek smooth
   useEffect(() => {
     if (cards.length > 0) {
       gsap.fromTo(
         ".pokemon-card",
-        { opacity: 0, y: 30, scale: 0.9 },
+        { opacity: 0, scale: 0.9, y: 20 },
         {
           opacity: 1,
-          y: 0,
           scale: 1,
+          y: 0,
           stagger: 0.15,
           duration: 0.6,
-          ease: "back.out(1.7)",
+          ease: "power2.out",
         },
       );
     }
@@ -93,7 +90,7 @@ const App = () => {
     <div style={styles.container}>
       <header style={{ textAlign: "center", marginBottom: "40px" }}>
         <h1 style={styles.title}>Pokémon Tracker Pro</h1>
-        <p style={{ color: "#94a3b8" }}>Data Real-time • Murni API TCG</p>
+        <p style={{ color: "#94a3b8" }}>Murni API • Testing Koneksi Langsung</p>
       </header>
 
       <form onSubmit={handleSearch} style={styles.searchForm}>
@@ -110,7 +107,7 @@ const App = () => {
 
       {loading && (
         <div style={{ textAlign: "center", color: "#fb7185" }}>
-          Menghubungkan ke server...
+          Sedang memanggil data Pokémon...
         </div>
       )}
       {error && (
@@ -129,14 +126,9 @@ const App = () => {
               alt={card.name}
               style={{ width: "100%", borderRadius: "12px" }}
             />
-            <h3 style={{ margin: "15px 0 5px 0", fontSize: "1.2rem" }}>
-              {card.name}
-            </h3>
+            <h3 style={{ margin: "15px 0 5px 0" }}>{card.name}</h3>
             <div style={styles.priceTag}>
-              Market Price: $
-              {card.tcgplayer?.prices?.holofoil?.market ||
-                card.tcgplayer?.prices?.normal?.market ||
-                "N/A"}
+              Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
             </div>
             <p style={{ fontSize: "0.85rem", color: "#64748b" }}>
               {card.set.name} (#{card.number})
