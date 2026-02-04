@@ -7,10 +7,10 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // API Key yang sudah kamu miliki
+  // API Key kamu untuk stabilitas data
   const API_KEY = "3c8fed90-404a-4db8-8fe0-e99ad48c82d7";
 
-  // Daftar koleksi awal (Mew, Gardevoir, Charizard, & Palkia)
+  // ID kartu awal yang akan otomatis muncul saat web dibuka
   const initialIds = [
     "sv4pt5-232",
     "sv4pt5-233",
@@ -19,6 +19,7 @@ const App = () => {
   ];
 
   const fetchCard = async (id) => {
+    // Proxy AllOrigins untuk menembus blokir ISP/CORS di browser
     const proxy = "https://api.allorigins.win/get?url=";
     const target = encodeURIComponent(
       `https://api.pokemontcg.io/v2/cards/${id}`,
@@ -28,7 +29,7 @@ const App = () => {
       headers: { "X-Api-Key": API_KEY },
     });
 
-    if (!res.ok) throw new Error("Gagal mengambil data");
+    if (!res.ok) throw new Error("Gagal mengambil data dari API");
 
     const json = await res.json();
     const data = JSON.parse(json.contents).data;
@@ -38,12 +39,15 @@ const App = () => {
   useEffect(() => {
     const loadInitial = async () => {
       setLoading(true);
+      setError(null);
       try {
         const promises = initialIds.map((id) => fetchCard(id));
         const results = await Promise.all(promises);
         setCards(results);
       } catch (err) {
-        setError("Koneksi API bermasalah. Coba refresh halaman.");
+        setError(
+          "Gagal memuat koleksi. Pastikan internet lancar atau buka via link Vercel.",
+        );
       } finally {
         setLoading(false);
       }
@@ -60,21 +64,22 @@ const App = () => {
       setCards((prev) => [newCard, ...prev]);
       setSearchId("");
     } catch (err) {
-      alert("ID tidak ditemukan! Pastikan format benar (contoh: sv4pt5-234)");
+      alert("ID tidak ditemukan! Contoh format: sv4pt5-234");
     } finally {
       setLoading(false);
     }
   };
 
-  // Animasi GSAP agar tampilan terlihat profesional
+  // Efek animasi kartu saat muncul
   useEffect(() => {
     if (cards.length > 0) {
       gsap.fromTo(
         ".card-box",
-        { opacity: 0, scale: 0.8 },
+        { opacity: 0, scale: 0.8, y: 30 },
         {
           opacity: 1,
           scale: 1,
+          y: 0,
           stagger: 0.15,
           duration: 0.6,
           ease: "back.out(1.7)",
@@ -87,13 +92,13 @@ const App = () => {
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>Pokémon Tracker Pro</h1>
-        <p>Real-time Market Price dari API Pokémon TCG</p>
+        <p>Data murni dari API Pokémon TCG</p>
       </header>
 
       <form onSubmit={handleSearch} style={styles.searchForm}>
         <input
           style={styles.input}
-          placeholder="Cari ID (e.g. sv4pt5-234)"
+          placeholder="Masukkan ID (e.g. swsh12pt5gg-GG67)"
           value={searchId}
           onChange={(e) => setSearchId(e.target.value)}
         />
@@ -102,7 +107,7 @@ const App = () => {
         </button>
       </form>
 
-      {loading && <div style={styles.loading}>Sedang memuat data...</div>}
+      {loading && <div style={styles.loading}>Menghubungkan ke server...</div>}
       {error && <div style={styles.error}>{error}</div>}
 
       <div style={styles.grid}>
@@ -110,14 +115,11 @@ const App = () => {
           <div key={card.id + i} className="card-box" style={styles.card}>
             <img src={card.images.small} alt={card.name} style={styles.img} />
             <h3 style={styles.cardName}>{card.name}</h3>
-            <div style={styles.priceContainer}>
-              <span style={styles.priceLabel}>Market Price:</span>
-              <span style={styles.priceValue}>
-                $
-                {card.tcgplayer?.prices?.holofoil?.market ||
-                  card.tcgplayer?.prices?.normal?.market ||
-                  "N/A"}
-              </span>
+            <div style={styles.priceTag}>
+              Market: $
+              {card.tcgplayer?.prices?.holofoil?.market ||
+                card.tcgplayer?.prices?.normal?.market ||
+                "N/A"}
             </div>
             <p style={styles.setInfo}>
               {card.set.name} (#{card.number})
@@ -135,7 +137,7 @@ const styles = {
     minHeight: "100vh",
     padding: "40px 20px",
     color: "white",
-    fontFamily: "Inter, sans-serif",
+    fontFamily: "sans-serif",
   },
   header: { textAlign: "center", marginBottom: "40px" },
   title: { color: "#fb7185", fontSize: "2.5rem", margin: "0" },
@@ -146,13 +148,12 @@ const styles = {
     marginBottom: "50px",
   },
   input: {
-    padding: "12px 16px",
+    padding: "12px",
     borderRadius: "10px",
     border: "1px solid #334155",
     backgroundColor: "#1e293b",
     color: "white",
     width: "280px",
-    fontSize: "1rem",
   },
   button: {
     padding: "12px 24px",
@@ -162,11 +163,10 @@ const styles = {
     color: "white",
     fontWeight: "bold",
     cursor: "pointer",
-    transition: "0.3s",
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "25px",
     maxWidth: "1200px",
     margin: "0 auto",
@@ -177,21 +177,19 @@ const styles = {
     borderRadius: "20px",
     border: "1px solid #334155",
     textAlign: "center",
-    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
   },
-  img: { width: "100%", borderRadius: "10px", marginBottom: "15px" },
-  cardName: { margin: "10px 0", fontSize: "1.2rem" },
-  priceContainer: {
-    backgroundColor: "#334155",
+  img: { width: "100%", borderRadius: "10px" },
+  cardName: { margin: "15px 0 10px 0", fontSize: "1.2rem" },
+  priceTag: {
+    backgroundColor: "#4f46e5",
     padding: "10px",
-    borderRadius: "12px",
-    margin: "10px 0",
+    borderRadius: "10px",
+    fontWeight: "bold",
+    marginBottom: "10px",
   },
-  priceLabel: { display: "block", fontSize: "0.8rem", color: "#94a3b8" },
-  priceValue: { fontSize: "1.2rem", fontWeight: "bold", color: "#10b981" },
   setInfo: { fontSize: "0.8rem", color: "#64748b" },
-  loading: { textAlign: "center", color: "#fb7185", marginBottom: "20px" },
-  error: { textAlign: "center", color: "#ef4444", marginBottom: "20px" },
+  loading: { textAlign: "center", color: "#fb7185" },
+  error: { textAlign: "center", color: "#ef4444", fontWeight: "bold" },
 };
 
 export default App;
