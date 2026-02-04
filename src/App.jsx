@@ -7,10 +7,12 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // API Key kamu untuk stabilitas data
-  const API_KEY = "3c8fed90-404a-4db8-8fe0-e99ad48c82d7";
+  // Mengambil API Key dari Environment Variable Vercel
+  const API_KEY =
+    import.meta.env.VITE_POKEMON_API_KEY ||
+    "3c8fed90-404a-4db8-8fe0-e99ad48c82d7";
 
-  // ID kartu awal yang akan otomatis muncul saat web dibuka
+  // Daftar kartu favoritmu untuk load awal
   const initialIds = [
     "sv4pt5-232",
     "sv4pt5-233",
@@ -19,21 +21,22 @@ const App = () => {
   ];
 
   const fetchCard = async (id) => {
-    // Proxy AllOrigins untuk menembus blokir ISP/CORS di browser
-    const proxy = "https://api.allorigins.win/get?url=";
-    const target = encodeURIComponent(
-      `https://api.pokemontcg.io/v2/cards/${id}`,
-    );
+    // LANGSUNG ke API resmi tanpa proxy AllOrigins agar tidak kena blokir CORS header
+    const url = `https://api.pokemontcg.io/v2/cards/${id}`;
 
-    const res = await fetch(`${proxy}${target}`, {
-      headers: { "X-Api-Key": API_KEY },
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-Api-Key": API_KEY,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
     });
 
-    if (!res.ok) throw new Error("Gagal mengambil data dari API");
+    if (!res.ok) throw new Error(`Kartu ${id} tidak ditemukan`);
 
-    const json = await res.json();
-    const data = JSON.parse(json.contents).data;
-    return data;
+    const result = await res.json();
+    return result.data;
   };
 
   useEffect(() => {
@@ -45,8 +48,9 @@ const App = () => {
         const results = await Promise.all(promises);
         setCards(results);
       } catch (err) {
+        console.error(err);
         setError(
-          "Gagal memuat koleksi. Pastikan internet lancar atau buka via link Vercel.",
+          "Koneksi API bermasalah. Pastikan Redeploy di Vercel sudah selesai.",
         );
       } finally {
         setLoading(false);
@@ -64,23 +68,22 @@ const App = () => {
       setCards((prev) => [newCard, ...prev]);
       setSearchId("");
     } catch (err) {
-      alert("ID tidak ditemukan! Contoh format: sv4pt5-234");
+      alert("ID tidak ditemukan! Gunakan format: sv4pt5-234");
     } finally {
       setLoading(false);
     }
   };
 
-  // Efek animasi kartu saat muncul
   useEffect(() => {
     if (cards.length > 0) {
       gsap.fromTo(
-        ".card-box",
-        { opacity: 0, scale: 0.8, y: 30 },
+        ".pokemon-card",
+        { opacity: 0, y: 30, scale: 0.9 },
         {
           opacity: 1,
-          scale: 1,
           y: 0,
-          stagger: 0.15,
+          scale: 1,
+          stagger: 0.2,
           duration: 0.6,
           ease: "back.out(1.7)",
         },
@@ -90,38 +93,56 @@ const App = () => {
 
   return (
     <div style={styles.container}>
-      <header style={styles.header}>
+      <header style={{ textAlign: "center", marginBottom: "40px" }}>
         <h1 style={styles.title}>Pokémon Tracker Pro</h1>
-        <p>Data murni dari API Pokémon TCG</p>
+        <p style={{ color: "#94a3b8" }}>
+          Murni API • Deployment Vercel Berhasil
+        </p>
       </header>
 
       <form onSubmit={handleSearch} style={styles.searchForm}>
         <input
           style={styles.input}
-          placeholder="Masukkan ID (e.g. swsh12pt5gg-GG67)"
+          placeholder="Cari ID (e.g. swsh12pt5gg-GG67)"
           value={searchId}
           onChange={(e) => setSearchId(e.target.value)}
         />
         <button type="submit" style={styles.button}>
-          Cari Kartu
+          Cari
         </button>
       </form>
 
-      {loading && <div style={styles.loading}>Menghubungkan ke server...</div>}
-      {error && <div style={styles.error}>{error}</div>}
+      {loading && (
+        <div style={{ textAlign: "center", color: "#fb7185" }}>
+          Mengambil data dari server Pokémon...
+        </div>
+      )}
+      {error && (
+        <div
+          style={{ textAlign: "center", color: "#ef4444", fontWeight: "bold" }}
+        >
+          {error}
+        </div>
+      )}
 
       <div style={styles.grid}>
         {cards.map((card, i) => (
-          <div key={card.id + i} className="card-box" style={styles.card}>
-            <img src={card.images.small} alt={card.name} style={styles.img} />
-            <h3 style={styles.cardName}>{card.name}</h3>
+          <div key={card.id + i} className="pokemon-card" style={styles.card}>
+            <img
+              src={card.images.small}
+              alt={card.name}
+              style={{ width: "100%", borderRadius: "12px" }}
+            />
+            <h3 style={{ margin: "15px 0 5px 0", fontSize: "1.2rem" }}>
+              {card.name}
+            </h3>
             <div style={styles.priceTag}>
-              Market: $
+              Market Price: $
               {card.tcgplayer?.prices?.holofoil?.market ||
                 card.tcgplayer?.prices?.normal?.market ||
                 "N/A"}
             </div>
-            <p style={styles.setInfo}>
+            <p style={{ fontSize: "0.85rem", color: "#64748b" }}>
               {card.set.name} (#{card.number})
             </p>
           </div>
@@ -139,16 +160,20 @@ const styles = {
     color: "white",
     fontFamily: "sans-serif",
   },
-  header: { textAlign: "center", marginBottom: "40px" },
-  title: { color: "#fb7185", fontSize: "2.5rem", margin: "0" },
+  title: {
+    color: "#fb7185",
+    fontSize: "2.5rem",
+    margin: "0",
+    fontWeight: "bold",
+  },
   searchForm: {
     display: "flex",
     justifyContent: "center",
     gap: "10px",
-    marginBottom: "50px",
+    marginBottom: "40px",
   },
   input: {
-    padding: "12px",
+    padding: "12px 16px",
     borderRadius: "10px",
     border: "1px solid #334155",
     backgroundColor: "#1e293b",
@@ -177,19 +202,15 @@ const styles = {
     borderRadius: "20px",
     border: "1px solid #334155",
     textAlign: "center",
+    transition: "0.3s",
   },
-  img: { width: "100%", borderRadius: "10px" },
-  cardName: { margin: "15px 0 10px 0", fontSize: "1.2rem" },
   priceTag: {
     backgroundColor: "#4f46e5",
     padding: "10px",
     borderRadius: "10px",
     fontWeight: "bold",
-    marginBottom: "10px",
+    margin: "12px 0",
   },
-  setInfo: { fontSize: "0.8rem", color: "#64748b" },
-  loading: { textAlign: "center", color: "#fb7185" },
-  error: { textAlign: "center", color: "#ef4444", fontWeight: "bold" },
 };
 
 export default App;
