@@ -1,7 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Ambil URL dan Anon Key dari Project Settings > API di Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Debugging sederhana untuk mematikan error "Required"
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error(
+    "Waduh! Kunci Supabase tidak terbaca di .env. Pastikan awalan VITE_ sudah benar.",
+  );
+}
+
+export const supabase = createClient(
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseAnonKey || "placeholder",
+);
