@@ -6,93 +6,86 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Mengambil API Key dari "Settings > Environment Variables" di Vercel
-  // Pastikan namanya sama persis: VITE_POKEMON_API_KEY
+  // Mengambil API Key dari Environment Variable Vercel
   const API_KEY = import.meta.env.VITE_POKEMON_API_KEY;
   const PALKIA_ID = "swsh12pt5gg-GG67";
 
-  const fetchSingleCard = async (id) => {
+  const fetchCardData = async (id) => {
     setLoading(true);
     setError(null);
     try {
-      // Menembak langsung ke API resmi tanpa proxy pihak ketiga
       const url = `https://api.pokemontcg.io/v2/cards/${id}`;
-
       const res = await fetch(url, {
         method: "GET",
         headers: {
-          "X-Api-Key": API_KEY, // Key rahasia kamu
+          "X-Api-Key": API_KEY,
           Accept: "application/json",
         },
       });
 
-      // Jika server memberikan error 504 atau 403, ini akan menangkapnya
-      if (!res.ok) {
-        throw new Error(`Server Error: ${res.status}. Cek API Key di Vercel.`);
-      }
+      if (!res.ok) throw new Error(`Gagal memuat data (Status: ${res.status})`);
 
       const result = await res.json();
       setCard(result.data);
     } catch (err) {
-      console.error("Fetch Error:", err);
-      setError(
-        "Gagal memuat kartu. Pastikan API Key benar dan Redeploy di Vercel.",
-      );
+      console.error(err);
+      setError("Koneksi Timeout atau API Key salah. Cek Settings Vercel.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Memuat kartu secara otomatis saat aplikasi dibuka
   useEffect(() => {
-    fetchSingleCard(PALKIA_ID);
+    fetchCardData(PALKIA_ID);
   }, []);
 
-  // Animasi GSAP agar kartu muncul dengan efek "Pop"
+  // Animasi GSAP agar tampilan profesional
   useEffect(() => {
     if (card) {
       gsap.fromTo(
-        ".palkia-box",
-        { opacity: 0, scale: 0.8, y: 30 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.8, ease: "back.out(1.7)" },
+        ".palkia-container",
+        { opacity: 0, scale: 0.8, y: 50 },
+        {
+          opacity: 1,
+          scale: 1,
+          y: 0,
+          duration: 1,
+          ease: "elastic.out(1, 0.5)",
+        },
       );
     }
   }, [card]);
 
   return (
     <div style={styles.container}>
-      <header style={{ textAlign: "center", marginBottom: "40px" }}>
-        <h1 style={styles.title}>Palkia VSTAR Live Tracker</h1>
-        <p style={{ color: "#94a3b8" }}>Data Real-time dari Pokémon TCG API</p>
-      </header>
+      <h1 style={styles.title}>Origin Forme Palkia Tracker</h1>
 
       {loading && (
-        <div style={{ textAlign: "center", color: "#fb7185" }}>
-          <p>Sedang memanggil Palkia dari server...</p>
-        </div>
+        <p style={styles.statusText}>Sedang memanggil data Palkia...</p>
       )}
-
-      {error && <div style={styles.errorBox}>{error}</div>}
+      {error && <p style={styles.errorText}>{error}</p>}
 
       {card && (
-        <div className="palkia-box" style={styles.card}>
-          <img src={card.images.large} alt={card.name} style={styles.img} />
-          <h2 style={{ margin: "15px 0 5px 0", fontSize: "1.8rem" }}>
-            {card.name}
-          </h2>
-          <p style={{ color: "#94a3b8", marginBottom: "20px" }}>
+        <div className="palkia-container" style={styles.cardBox}>
+          {/* Gambar kartu beresolusi tinggi */}
+          <img src={card.images.large} alt={card.name} style={styles.cardImg} />
+
+          <h2 style={{ margin: "10px 0" }}>{card.name}</h2>
+          <p style={{ color: "#94a3b8" }}>
             {card.set.name} • {card.rarity}
           </p>
 
-          <div style={styles.priceTag}>
-            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
+          <div style={styles.priceContainer}>
+            <span style={{ fontSize: "0.9rem", display: "block" }}>
+              Market Price
+            </span>
+            <span style={{ fontSize: "2rem" }}>
+              ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
+            </span>
           </div>
 
-          <button
-            onClick={() => fetchSingleCard(PALKIA_ID)}
-            style={styles.refreshBtn}
-          >
-            Update Harga Terbaru
+          <button onClick={() => fetchCardData(PALKIA_ID)} style={styles.btn}>
+            Cek Harga Terbaru
           </button>
         </div>
       )}
@@ -112,48 +105,45 @@ const styles = {
     fontFamily: "sans-serif",
     padding: "20px",
   },
-  title: { color: "#fb7185", fontSize: "2.5rem", margin: "0" },
-  errorBox: {
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    border: "1px solid #ef4444",
-    padding: "15px",
-    borderRadius: "10px",
-    color: "#ef4444",
+  title: {
+    color: "#fb7185",
+    marginBottom: "30px",
+    fontSize: "2.2rem",
     textAlign: "center",
   },
-  card: {
+  statusText: { color: "#fb7185", fontWeight: "bold" },
+  errorText: {
+    color: "#ef4444",
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    padding: "10px",
+    borderRadius: "8px",
+  },
+  cardBox: {
     backgroundColor: "#1e293b",
     padding: "30px",
     borderRadius: "25px",
-    textAlign: "center",
     border: "1px solid #334155",
+    textAlign: "center",
     maxWidth: "400px",
-    boxShadow:
-      "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
   },
-  img: {
-    width: "100%",
-    borderRadius: "15px",
-    boxShadow: "0 10px 20px rgba(0,0,0,0.5)",
-  },
-  priceTag: {
+  cardImg: { width: "100%", borderRadius: "15px", marginBottom: "15px" },
+  priceContainer: {
     backgroundColor: "#4f46e5",
     padding: "15px",
-    borderRadius: "12px",
-    fontSize: "1.4rem",
+    borderRadius: "15px",
     fontWeight: "bold",
     margin: "20px 0",
   },
-  refreshBtn: {
-    marginTop: "10px",
-    padding: "12px 24px",
-    borderRadius: "10px",
-    border: "none",
+  btn: {
     backgroundColor: "#10b981",
     color: "white",
-    cursor: "pointer",
+    border: "none",
+    padding: "12px 20px",
+    borderRadius: "10px",
     fontWeight: "bold",
-    transition: "transform 0.2s",
+    cursor: "pointer",
+    width: "100%",
   },
 };
 
