@@ -9,24 +9,24 @@ const App = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      setStatus("Menghubungkan ke Supabase...");
+      setStatus("Mengecek Database...");
 
       // 1. Cek Supabase
-      const { data: localData, error: dbError } = await supabase
+      const { data: dbData } = await supabase
         .from("cards")
         .select("*")
         .eq("id", "neo2-1")
         .single();
 
-      if (localData) {
-        setCard(localData.full_json);
-        setStatus("Data diambil dari Database!");
+      if (dbData) {
+        setCard(dbData.full_json);
+        setStatus("Data dari Supabase (Cepat!)");
         setLoading(false);
         return;
       }
 
-      // 2. Ambil dari API (Gunakan header Accept untuk hindari error 406)
-      setStatus("Mengambil data dari Pokémon API...");
+      // 2. Ambil dari API jika di DB kosong
+      setStatus("Mengambil dari API Pokémon...");
       const res = await fetch("https://api.pokemontcg.io/v2/cards/neo2-1", {
         headers: {
           "X-Api-Key": import.meta.env.VITE_POKEMON_API_KEY,
@@ -34,12 +34,12 @@ const App = () => {
         },
       });
 
-      if (!res.ok) throw new Error(`Server API Error: ${res.status}`);
+      if (!res.ok) throw new Error(`API Error: ${res.status}`);
 
       const result = await res.json();
       const cardData = result.data;
 
-      // 3. Simpan ke Supabase (Upsert agar tidak double)
+      // 3. Simpan ke Supabase agar tidak kena 504/Limit lagi
       await supabase.from("cards").upsert([
         {
           id: cardData.id,
@@ -50,10 +50,10 @@ const App = () => {
       ]);
 
       setCard(cardData);
-      setStatus("Data berhasil dimuat dan disimpan!");
+      setStatus("Berhasil dimuat!");
     } catch (err) {
       console.error(err);
-      setStatus(`Error: ${err.message}`);
+      setStatus(`Masalah: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -63,23 +63,18 @@ const App = () => {
     fetchData();
   }, []);
 
-  if (loading) return <div style={styles.info}>🔄 {status}</div>;
+  if (loading) return <div style={styles.center}>🔄 {status}</div>;
 
   return (
     <div style={styles.container}>
-      <p style={styles.statusText}>{status}</p>
+      <p style={styles.status}>{status}</p>
       {card && (
         <div className="card-box" style={styles.cardBox}>
           <img src={card.images.large} alt={card.name} style={styles.img} />
           <h1 style={styles.title}>{card.name}</h1>
-          <div style={styles.detail}>
-            <p>
-              <strong>Set:</strong> {card.set.name}
-            </p>
-            <p>
-              <strong>Artist:</strong> {card.artist}
-            </p>
-            <p style={styles.flavor}>{card.flavorText}</p>
+          <p style={styles.flavor}>{card.flavorText}</p>
+          <div style={styles.price}>
+            Market Price: ${card.tcgplayer?.prices?.holofoil?.market || "N/A"}
           </div>
         </div>
       )}
@@ -95,25 +90,27 @@ const styles = {
     padding: "40px",
     fontFamily: "sans-serif",
   },
-  info: { color: "white", textAlign: "center", marginTop: "50px" },
-  statusText: { fontSize: "0.8rem", color: "#10b981", marginBottom: "20px" },
+  center: { textAlign: "center", marginTop: "50px", color: "white" },
+  status: { fontSize: "0.8rem", color: "#10b981", textAlign: "center" },
   cardBox: {
-    maxWidth: "400px",
-    margin: "0 auto",
+    maxWidth: "350px",
+    margin: "20px auto",
     backgroundColor: "#0f172a",
     padding: "20px",
     borderRadius: "20px",
     border: "1px solid #1e293b",
     textAlign: "center",
   },
-  img: {
-    width: "100%",
+  img: { width: "100%", borderRadius: "10px" },
+  title: { color: "#fb7185", margin: "15px 0" },
+  flavor: { fontStyle: "italic", color: "#94a3b8", fontSize: "0.85rem" },
+  price: {
+    marginTop: "20px",
+    backgroundColor: "#4f46e5",
+    padding: "10px",
     borderRadius: "10px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+    fontWeight: "bold",
   },
-  title: { color: "#fb7185", marginTop: "20px" },
-  detail: { textAlign: "left", marginTop: "20px", fontSize: "0.9rem" },
-  flavor: { fontStyle: "italic", color: "#64748b", marginTop: "10px" },
 };
 
 export default App;
