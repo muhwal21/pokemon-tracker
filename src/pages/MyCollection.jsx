@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../utils/supabaseClient";
-// Kita pakai AreaChart supaya ada efek gradasi warna yang cantik
 import {
   AreaChart,
   Area,
@@ -11,23 +10,42 @@ import {
   CartesianGrid,
 } from "recharts";
 
-const MyCollection = () => {
+const MyCollection = ({ session }) => {
   const [collection, setCollection] = useState([]);
-  const [stats, setStats] = useState({ totalBeli: 0, totalSekarang: 0 });
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalBeli: 0,
+    totalSekarang: 0,
+    persen: 0,
+  });
 
   useEffect(() => {
-    fetchMyCards();
-  }, []);
+    if (session) fetchMyCards();
+  }, [session]);
 
   const fetchMyCards = async () => {
+    setLoading(true);
+    // Kita panggil relasi cards(*) karena tabel user_collections baru kita bersih (hanya ID)
     const { data, error } = await supabase
       .from("user_collections")
-      .select("*, cards(*)");
+      .select(
+        `
+        *,
+        cards (
+          name,
+          image_small,
+          market_price,
+          cardmarket_trend_price
+        )
+      `,
+      )
+      .eq("user_id", session.user.id);
 
     if (!error && data) {
       setCollection(data);
       hitungStats(data);
     }
+    setLoading(false);
   };
 
   const hitungStats = (data) => {
@@ -36,14 +54,20 @@ const MyCollection = () => {
       0,
     );
     const sekarang = data.reduce(
-      (acc, curr) => acc + (curr.cards?.market_price || 0),
+      (acc, curr) =>
+        acc +
+        (curr.cards?.market_price || curr.cards?.cardmarket_trend_price || 0),
       0,
     );
-    setStats({ totalBeli: beli, totalSekarang: sekarang });
+
+    const selisih = sekarang - beli;
+    const persen = beli > 0 ? (selisih / beli) * 100 : 0;
+
+    setStats({ totalBeli: beli, totalSekarang: sekarang, persen: persen });
   };
 
   const deleteCard = async (id) => {
-    const confirmDelete = window.confirm("Yakin ingin menghapus kartu ini?");
+    const confirmDelete = window.confirm("Hapus kartu ini dari portfolio?");
     if (!confirmDelete) return;
 
     const { error } = await supabase
@@ -58,60 +82,99 @@ const MyCollection = () => {
     }
   };
 
-  // Data grafik: Membandingkan Modal vs Market per kartu
+  // Data grafik: Memetakan modal vs harga market sekarang
   const chartData = collection.map((item) => ({
-    name: item.cards?.name.substring(0, 10),
+    name: item.cards?.name ? item.cards.name.substring(0, 8) + ".." : "Unknown",
     Modal: item.acquired_price || 0,
-    Market: item.cards?.market_price || 0,
+    Market: item.cards?.market_price || item.cards?.cardmarket_trend_price || 0,
   }));
 
   const profit = stats.totalSekarang - stats.totalBeli;
+  const isProfit = profit >= 0;
+
+  if (loading)
+    return (
+      <div
+        style={{
+          padding: "100px",
+          textAlign: "center",
+          color: "white",
+          fontSize: "20px",
+        }}
+      >
+        🚀 Membuka Brankas Sultan...
+      </div>
+    );
 
   return (
-    <div
-      style={{
-        padding: "30px",
-        color: "white",
-        maxWidth: "1100px",
-        margin: "0 auto",
-      }}
-    >
-      <h1 style={{ marginBottom: "25px" }}>📊 Portfolio Sultan</h1>
+    <div style={styles.container}>
+      <header style={styles.header}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: "32px", fontWeight: "bold" }}>
+            📈 Portfolio Investasi
+          </h1>
+          <p style={{ color: "#94a3b8", margin: "8px 0 0 0" }}>
+            Pantau pertumbuhan nilai koleksi kartu kamu
+          </p>
+        </div>
+      </header>
 
       {/* --- STAT CARDS --- */}
       <div style={styles.statsGrid}>
         <div style={styles.statCard}>
-          <p style={styles.statLabel}>MODAL AWAL</p>
-          <h2 style={styles.statValue}>${stats.totalBeli.toFixed(2)}</h2>
+          <p style={styles.statLabel}>MODAL INVESTASI</p>
+          <h2 style={styles.statValue}>${stats.totalBeli.toLocaleString()}</h2>
+          <span style={{ fontSize: "12px", color: "#64748b" }}>
+            Uang Keluar
+          </span>
         </div>
+
         <div style={styles.statCard}>
           <p style={styles.statLabel}>MARKET VALUE</p>
-          <h2 style={styles.statValue}>${stats.totalSekarang.toFixed(2)}</h2>
+          <h2 style={{ ...styles.statValue, color: "#3b82f6" }}>
+            ${stats.totalSekarang.toLocaleString()}
+          </h2>
+          <span style={{ fontSize: "12px", color: "#64748b" }}>
+            Estimasi Saat Ini
+          </span>
         </div>
+
         <div
           style={{
             ...styles.statCard,
-            borderLeft: `4px solid ${profit >= 0 ? "#10b981" : "#ef4444"}`,
+            borderBottom: `4px solid ${isProfit ? "#10b981" : "#ef4444"}`,
           }}
         >
-          <p style={styles.statLabel}>PROFIT / LOSS</p>
-          <h2
-            style={{
-              ...styles.statValue,
-              color: profit >= 0 ? "#10b981" : "#ef4444",
-            }}
-          >
-            {profit >= 0 ? "▲" : "▼"} ${Math.abs(profit).toFixed(2)}
-          </h2>
+          <p style={styles.statLabel}>ESTIMASI PROFIT</p>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+            <h2
+              style={{
+                ...styles.statValue,
+                color: isProfit ? "#10b981" : "#ef4444",
+              }}
+            >
+              {isProfit ? "+" : ""}${profit.toLocaleString()}
+            </h2>
+            <span
+              style={{
+                fontWeight: "bold",
+                color: isProfit ? "#10b981" : "#ef4444",
+              }}
+            >
+              ({stats.persen.toFixed(2)}%)
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* --- GRAFIK GARIS NAIK (AREA CHART) --- */}
+      {/* --- AREA CHART SECTION --- */}
       <div style={styles.chartSection}>
-        <h3 style={{ marginBottom: "20px", color: "#94a3b8" }}>
-          💹 Grafik Tren Nilai Koleksi
+        <h3
+          style={{ marginBottom: "25px", fontSize: "18px", color: "#94a3b8" }}
+        >
+          Grafik Performa Portfolio
         </h3>
-        <div style={{ width: "100%", height: 300 }}>
+        <div style={{ width: "100%", height: 350 }}>
           <ResponsiveContainer>
             <AreaChart data={chartData}>
               <defs>
@@ -125,145 +188,218 @@ const MyCollection = () => {
                 stroke="#1e293b"
                 vertical={false}
               />
-              <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
-              <YAxis stroke="#64748b" fontSize={12} />
+              <XAxis
+                dataKey="name"
+                stroke="#64748b"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                stroke="#64748b"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+              />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "#0f172a",
-                  border: "none",
-                  borderRadius: "8px",
+                  border: "1px solid #1e293b",
+                  borderRadius: "12px",
                 }}
+                itemStyle={{ fontSize: "12px" }}
               />
-
-              {/* Garis Modal (Biru) */}
-              <Area
-                type="monotone"
-                dataKey="Modal"
-                stroke="#3b82f6"
-                fillOpacity={0}
-                strokeWidth={3}
-              />
-              {/* Garis Market (Hijau - Yang Naik Ke Atas) */}
               <Area
                 type="monotone"
                 dataKey="Market"
                 stroke="#10b981"
+                strokeWidth={3}
                 fillOpacity={1}
                 fill="url(#colorMarket)"
-                strokeWidth={3}
+              />
+              <Area
+                type="monotone"
+                dataKey="Modal"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                fill="none"
+                strokeDasharray="5 5"
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        <div style={styles.chartLegend}>
+          <span style={{ color: "#3b82f6" }}>● Modal Beli</span>
+          <span style={{ color: "#10b981" }}>● Harga Pasar Sekarang</span>
+        </div>
       </div>
 
-      {/* --- GRID KOLEKSI --- */}
+      {/* --- ASSET LIST --- */}
+      <h3 style={{ marginBottom: "25px", fontSize: "22px" }}>
+        Rincian Koleksi
+      </h3>
       <div style={styles.grid}>
-        {collection.map((item) => (
-          <div key={item.id} style={styles.cardWrapper}>
-            <div style={{ position: "relative" }}>
-              <img
-                src={item.cards?.image_small}
-                style={styles.cardImage}
-                alt=""
-              />
-              <button
-                onClick={() => deleteCard(item.id)}
-                style={styles.deleteBtn}
-              >
-                ✕
-              </button>
-              {item.is_graded && (
-                <div style={styles.psaBadge}>PSA {item.grade_value}</div>
-              )}
-            </div>
-            <div style={{ padding: "15px" }}>
-              <h4 style={{ margin: "0 0 10px 0" }}>{item.cards?.name}</h4>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "12px",
-                }}
-              >
-                <span style={{ color: "#64748b" }}>
-                  Beli: ${item.acquired_price}
-                </span>
-                <span style={{ color: "#10b981", fontWeight: "bold" }}>
-                  Mkt: ${item.cards?.market_price}
-                </span>
+        {collection.map((item) => {
+          const currentPrice =
+            item.cards?.market_price || item.cards?.cardmarket_trend_price || 0;
+          const itemProfit = currentPrice - item.acquired_price;
+
+          return (
+            <div key={item.id} style={styles.assetCard}>
+              <div style={styles.imgContainer}>
+                <img
+                  src={item.cards?.image_small}
+                  style={styles.assetImg}
+                  alt={item.cards?.name}
+                />
+              </div>
+              <div style={styles.assetInfo}>
+                <h4 style={styles.assetName}>
+                  {item.cards?.name || "Unknown Card"}
+                </h4>
+                <div style={styles.priceRow}>
+                  <div style={styles.priceCol}>
+                    <span style={styles.priceLabel}>BELI</span>
+                    <span style={{ color: "white", fontWeight: "bold" }}>
+                      ${item.acquired_price}
+                    </span>
+                  </div>
+                  <div style={styles.priceCol}>
+                    <span style={styles.priceLabel}>PROFIT</span>
+                    <span
+                      style={{
+                        color: itemProfit >= 0 ? "#10b981" : "#ef4444",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {itemProfit >= 0 ? "+" : ""}${itemProfit.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteCard(item.id)}
+                  style={styles.sellBtn}
+                >
+                  Hapus dari Portfolio
+                </button>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 };
 
 const styles = {
+  container: {
+    padding: "40px",
+    maxWidth: "1200px",
+    margin: "0 auto",
+    color: "white",
+    fontFamily: "'Inter', sans-serif",
+  },
+  header: {
+    marginBottom: "50px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   statsGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: "20px",
-    marginBottom: "30px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: "25px",
+    marginBottom: "50px",
   },
   statCard: {
     background: "#1e293b",
-    padding: "20px",
-    borderRadius: "12px",
+    padding: "30px",
+    borderRadius: "20px",
     border: "1px solid #334155",
+    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
   },
   statLabel: {
-    fontSize: "10px",
+    fontSize: "12px",
     color: "#94a3b8",
-    fontWeight: "bold",
-    marginBottom: "10px",
+    fontWeight: "800",
+    marginBottom: "12px",
+    letterSpacing: "1.5px",
   },
-  statValue: { margin: 0, fontSize: "26px", fontWeight: "bold" },
+  statValue: { margin: 0, fontSize: "36px", fontWeight: "800" },
   chartSection: {
     background: "#1e293b",
-    padding: "25px",
-    borderRadius: "15px",
+    padding: "35px",
+    borderRadius: "24px",
     border: "1px solid #334155",
-    marginBottom: "40px",
+    marginBottom: "50px",
+  },
+  chartLegend: {
+    display: "flex",
+    gap: "30px",
+    justifyContent: "center",
+    marginTop: "20px",
+    fontSize: "13px",
+    fontWeight: "600",
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: "20px",
+    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+    gap: "30px",
   },
-  cardWrapper: {
+  assetCard: {
     background: "#0f172a",
-    borderRadius: "12px",
+    borderRadius: "20px",
     overflow: "hidden",
     border: "1px solid #1e293b",
-    position: "relative",
+    transition: "transform 0.2s ease-in-out",
+    ":hover": { transform: "translateY(-5px)" },
   },
-  cardImage: { width: "100%", display: "block" },
-  psaBadge: {
-    position: "absolute",
-    top: "10px",
-    right: "10px",
-    background: "#2563eb",
-    color: "white",
-    padding: "2px 8px",
-    borderRadius: "4px",
+  imgContainer: {
+    background: "#1e293b",
+    padding: "20px",
+    display: "flex",
+    justifyContent: "center",
+  },
+  assetImg: {
+    width: "100%",
+    height: "240px",
+    objectFit: "contain",
+  },
+  assetInfo: { padding: "20px" },
+  assetName: {
+    margin: "0 0 15px 0",
+    fontSize: "16px",
+    fontWeight: "bold",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  priceRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginBottom: "20px",
+  },
+  priceCol: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+  },
+  priceLabel: {
     fontSize: "10px",
+    color: "#64748b",
     fontWeight: "bold",
   },
-  deleteBtn: {
-    position: "absolute",
-    top: "10px",
-    left: "10px",
-    background: "rgba(239, 68, 68, 0.9)",
-    color: "white",
-    border: "none",
-    borderRadius: "50%",
-    width: "25px",
-    height: "25px",
+  sellBtn: {
+    width: "100%",
+    padding: "10px",
+    background: "rgba(239, 68, 68, 0.1)",
+    border: "1px solid #ef4444",
+    color: "#ef4444",
+    borderRadius: "12px",
     cursor: "pointer",
-    zIndex: 10,
+    fontSize: "13px",
+    fontWeight: "bold",
+    transition: "0.2s",
   },
 };
 

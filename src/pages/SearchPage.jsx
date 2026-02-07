@@ -5,7 +5,7 @@ const SearchPage = ({ session }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sortBy, setSortBy] = useState("default");
+  const [sortBy, setSortBy] = useState("price_low");
   const [currentPage, setCurrentPage] = useState(1);
   const cardsPerPage = 8;
 
@@ -13,11 +13,9 @@ const SearchPage = ({ session }) => {
   const [showModal, setShowModal] = useState(false);
   const [buyPrice, setBuyPrice] = useState(0);
 
-  // --- 1. LOGIKA PERSISTENCE (AMBIL DATA SAAT RE-RENDER) ---
   useEffect(() => {
     const savedSearch = localStorage.getItem("lastSearchTerm");
     const savedCards = localStorage.getItem("lastSearchResults");
-
     if (savedSearch) setSearchTerm(savedSearch);
     if (savedCards) setCards(JSON.parse(savedCards));
   }, []);
@@ -31,9 +29,7 @@ const SearchPage = ({ session }) => {
         color: "#3b82f6",
       },
     ];
-
     const activePrices = prices.filter((p) => p.value && p.value > 0);
-
     if (activePrices.length === 0) {
       return (
         <div style={{ fontSize: "10px", color: "#64748b", marginTop: "5px" }}>
@@ -41,7 +37,6 @@ const SearchPage = ({ session }) => {
         </div>
       );
     }
-
     return (
       <div style={styles.priceContainer}>
         {activePrices.map((p, i) => (
@@ -57,28 +52,29 @@ const SearchPage = ({ session }) => {
   const fetchCards = async () => {
     if (!searchTerm) return;
     setLoading(true);
-
     let query = supabase.from("cards").select("*");
-
     if (searchTerm.includes("-")) {
       query = query.eq("id", searchTerm.trim());
     } else {
       query = query.ilike("name", `%${searchTerm}%`);
     }
-
-    if (sortBy === "price_low")
-      query = query.order("market_price", { ascending: true });
-    else if (sortBy === "price_high")
-      query = query.order("market_price", { ascending: false });
-
     const { data, error } = await query;
-    if (!error) {
-      setCards(data);
+    if (!error && data) {
+      const sortedData = [...data].sort((a, b) => {
+        const priceA = a.market_price || a.cardmarket_trend_price || 0;
+        const priceB = b.market_price || b.cardmarket_trend_price || 0;
+        if (sortBy === "price_low") {
+          if (priceA === 0) return 1;
+          if (priceB === 0) return -1;
+          return priceA - priceB;
+        } else {
+          return priceB - priceA;
+        }
+      });
+      setCards(sortedData);
       setCurrentPage(1);
-
-      // --- 2. SIMPAN HASIL KE LOCALSTORAGE ---
       localStorage.setItem("lastSearchTerm", searchTerm);
-      localStorage.setItem("lastSearchResults", JSON.stringify(data));
+      localStorage.setItem("lastSearchResults", JSON.stringify(sortedData));
     }
     setLoading(false);
   };
@@ -100,29 +96,33 @@ const SearchPage = ({ session }) => {
   };
 
   const saveToCollection = async () => {
+    if (!selectedCard || !session) return;
+
+    // PERBAIKAN: Hanya mengirim data yang ada di tabel database baru
     const { error } = await supabase.from("user_collections").insert([
       {
         user_id: session.user.id,
         card_id: selectedCard.id,
-        acquired_price: parseFloat(buyPrice),
-        current_market_price:
-          selectedCard.market_price || selectedCard.cardmarket_trend_price,
+        acquired_price: parseFloat(buyPrice) || 0,
         bought_at: new Date(),
       },
     ]);
+
     if (!error) {
       alert("✅ Berhasil masuk koleksi!");
       setShowModal(false);
+    } else {
+      alert("Gagal simpan: " + error.message);
     }
   };
 
   return (
-    <div style={{ padding: "30px" }}>
+    <div style={{ padding: "30px", color: "white" }}>
       <div style={styles.headerAction}>
         <div style={styles.searchBar}>
           <input
             style={styles.input}
-            placeholder="Cari Nama atau ID (svp-196)..."
+            placeholder="Cari Nama atau ID..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && fetchCards()}
@@ -130,38 +130,61 @@ const SearchPage = ({ session }) => {
           <button style={styles.btn} onClick={fetchCards}>
             {loading ? "..." : "Cari"}
           </button>
-
-          {/* Tombol Reset biar kalau mau bersihin localStorage gampang */}
           <button
             style={{ ...styles.btn, background: "#334155" }}
             onClick={() => {
               setCards([]);
               setSearchTerm("");
-              localStorage.removeItem("lastSearchTerm");
-              localStorage.removeItem("lastSearchResults");
+              localStorage.clear();
             }}
           >
             Clear
           </button>
         </div>
-
         <select
           style={styles.sortSelect}
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
         >
-          <option value="default">Urutkan</option>
-          <option value="price_low">Termurah</option>
-          <option value="price_high">Termahal</option>
+          <option value="price_low">Urutkan: Termurah</option>
+          <option value="price_high">Urutkan: Termahal</option>
         </select>
       </div>
+
+      {cards.length > cardsPerPage && (
+        <div style={styles.pagination}>
+          <button
+            disabled={currentPage === 1}
+            onClick={() => {
+              setCurrentPage((p) => p - 1);
+              window.scrollTo(0, 0);
+            }}
+            style={styles.pageBtn}
+          >
+            ‹ Previous
+          </button>
+          <span
+            style={{ fontSize: "14px", color: "#94a3b8", fontWeight: "bold" }}
+          >
+            Halaman {currentPage} dari {totalPages}
+          </span>
+          <button
+            disabled={currentPage === totalPages}
+            onClick={() => {
+              setCurrentPage((p) => p + 1);
+              window.scrollTo(0, 0);
+            }}
+            style={styles.pageBtn}
+          >
+            Next ›
+          </button>
+        </div>
+      )}
 
       <div style={styles.cardGrid}>
         {currentCards.map((card) => (
           <div key={card.id} style={styles.cardItem}>
-            <div style={{ position: "relative" }}>
-              <img src={card.image_small} style={styles.cardImg} alt="" />
-            </div>
+            <img src={card.image_small} style={styles.cardImg} alt="" />
             <h4 style={styles.cardTitle}>{card.name}</h4>
             <p
               style={{
@@ -179,29 +202,6 @@ const SearchPage = ({ session }) => {
           </div>
         ))}
       </div>
-
-      {/* Pagination & Modal tetap sama */}
-      {cards.length > cardsPerPage && (
-        <div style={styles.pagination}>
-          <button
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
-            style={styles.pageBtn}
-          >
-            ‹
-          </button>
-          <span style={{ fontSize: "14px", color: "#94a3b8" }}>
-            {currentPage} / {totalPages}
-          </span>
-          <button
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage((p) => p + 1)}
-            style={styles.pageBtn}
-          >
-            ›
-          </button>
-        </div>
-      )}
 
       {showModal && (
         <div style={styles.modalOverlay}>
@@ -234,7 +234,6 @@ const SearchPage = ({ session }) => {
   );
 };
 
-// ... Styles tetap sama seperti sebelumnya ...
 const styles = {
   headerAction: {
     display: "flex",
@@ -267,7 +266,6 @@ const styles = {
     color: "white",
     border: "1px solid #334155",
     borderRadius: "8px",
-    minWidth: "150px",
   },
   cardGrid: {
     display: "grid",
@@ -312,21 +310,23 @@ const styles = {
     color: "white",
     cursor: "pointer",
     fontWeight: "bold",
-    marginTop: "10px",
   },
   pagination: {
     display: "flex",
-    justifyContent: "center",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginTop: "40px",
-    gap: "20px",
+    marginBottom: "30px",
+    background: "#1e293b",
+    padding: "10px 20px",
+    borderRadius: "12px",
   },
   pageBtn: {
     padding: "8px 20px",
-    background: "#1e293b",
+    background: "#3b82f6",
     color: "white",
     border: "none",
     borderRadius: "6px",
+    fontWeight: "bold",
     cursor: "pointer",
   },
   modalOverlay: {
@@ -345,7 +345,6 @@ const styles = {
     background: "#1e293b",
     padding: "30px",
     borderRadius: "20px",
-    border: "1px solid #334155",
     width: "300px",
     textAlign: "center",
   },
@@ -366,7 +365,6 @@ const styles = {
     borderRadius: "10px",
     width: "120px",
     textAlign: "center",
-    fontSize: "20px",
   },
   confirmBtn: {
     flex: 1,
